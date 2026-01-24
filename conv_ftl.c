@@ -272,6 +272,7 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 
 		/* CBGC */
 		list_add_tail(&wpp->curline->entry, &lm->victim_line_list);
+		
 		lm->victim_line_cnt++;
 	}
 	/* current line is used up, pick another empty line */
