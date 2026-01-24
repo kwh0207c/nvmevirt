@@ -272,7 +272,7 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 
 		/* CBGC */
 		list_add_tail(&wpp->curline->entry, &lm->victim_line_list);
-		
+
 		lm->victim_line_cnt++;
 	}
 	/* current line is used up, pick another empty line */
@@ -677,25 +677,26 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
     
     /* CBGC */
 	struct line *line = NULL;
-
-	double max_score = -1.0;
+	uint64_t max_score = 0;
+	uint64_t total_pages = spp->pgs_per_line;
     ktime_t now = ktime_get();
-    /* Iteration */
+
+    /* CBGC: Iteration */
     list_for_each_entry(line, &lm->victim_line_list, entry) {
-		/* If all pages are invalid */
-        if (line->vpc == 0) {
+		uint64_t vpc = (uint64_t)line->vpc;
+
+		/* If all pages are invalid */		
+        if (vpc == 0) {
             victim_line = line;
             break;
         }
 
-        /* Calculate Utilization (u) */
-        double u = (double)line->vpc / (double)spp->pgs_per_line;
-
         /* Calculate Age */
-        int64_t age = ktime_to_ns(ktime_sub(now, line->last_update));
+        uint64_t age = (uint64_t) ktime_to_ns(ktime_sub(now, line->last_update));
         
         /* Calculate Score: ((1 - u) * Age) / u */
-        double score = ((1.0 - u) * (double)age) / u;
+		uint64_t numerator = (total_pages - vpc) * age;
+        uint64_t score = div64_u64(numerator, vpc);
 
         if (score > max_score) {
             max_score = score;
