@@ -65,30 +65,31 @@ static inline void set_rmap_ent(struct conv_ftl *conv_ftl, uint64_t lpn, struct 
 	conv_ftl->rmap[pgidx] = lpn;
 }
 
-static inline int victim_line_cmp_pri(pqueue_pri_t next, pqueue_pri_t curr)
-{
-	return (next > curr);
-}
+/* Greedy */
+// static inline int victim_line_cmp_pri(pqueue_pri_t next, pqueue_pri_t curr)
+// {
+// 	return (next > curr);
+// }
 
-static inline pqueue_pri_t victim_line_get_pri(void *a)
-{
-	return ((struct line *)a)->vpc;
-}
+// static inline pqueue_pri_t victim_line_get_pri(void *a)
+// {
+// 	return ((struct line *)a)->vpc;
+// }
 
-static inline void victim_line_set_pri(void *a, pqueue_pri_t pri)
-{
-	((struct line *)a)->vpc = pri;
-}
+// static inline void victim_line_set_pri(void *a, pqueue_pri_t pri)
+// {
+// 	((struct line *)a)->vpc = pri;
+// }
 
-static inline size_t victim_line_get_pos(void *a)
-{
-	return ((struct line *)a)->pos;
-}
+// static inline size_t victim_line_get_pos(void *a)
+// {
+// 	return ((struct line *)a)->pos;
+// }
 
-static inline void victim_line_set_pos(void *a, size_t pos)
-{
-	((struct line *)a)->pos = pos;
-}
+// static inline void victim_line_set_pos(void *a, size_t pos)
+// {
+// 	((struct line *)a)->pos = pos;
+// }
 
 static inline void consume_write_credit(struct conv_ftl *conv_ftl)
 {
@@ -121,12 +122,13 @@ static void init_lines(struct conv_ftl *conv_ftl)
 	INIT_LIST_HEAD(&lm->free_line_list);
 	INIT_LIST_HEAD(&lm->full_line_list);
 
+	/* CBGC */
+	INIT_LIST_HEAD(&lm->victim_line_list);
+
 	/* Greedy */
 	// lm->victim_line_pq = pqueue_init(spp->tt_lines, victim_line_cmp_pri, victim_line_get_pri,
 	// 				 victim_line_set_pri, victim_line_get_pos,
 	// 				 victim_line_set_pos);
-
-	// 
 
 	lm->free_line_cnt = 0;
 	for (i = 0; i < lm->tt_lines; i++) {
@@ -134,7 +136,8 @@ static void init_lines(struct conv_ftl *conv_ftl)
 			.id = i,
 			.ipc = 0,
 			.vpc = 0,
-			.pos = 0,
+			/* Greedy */
+			// .pos = 0,
 			.entry = LIST_HEAD_INIT(lm->lines[i].entry),
 			.last_update = ktime_set(0, 0),
 		};
@@ -267,6 +270,8 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 		/* Greedy */
 		// pqueue_insert(lm->victim_line_pq, wpp->curline);
 
+		/* CBGC */
+		list_add_tail(&wpp->curline->entry, &lm->victim_line_list);
 		lm->victim_line_cnt++;
 	}
 	/* current line is used up, pick another empty line */
@@ -523,21 +528,29 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 	}
 	line->ipc++;
 	NVMEV_ASSERT(line->vpc > 0 && line->vpc <= spp->pgs_per_line);
+	/* Greedy */
 	/* Adjust the position of the victime line in the pq under over-writes */
-	if (line->pos) {
-		/* Greedy */
-		/* Note that line->vpc will be updated by this call */
-		// pqueue_change_priority(lm->victim_line_pq, line->vpc - 1, line);
-	} else {
-		line->vpc--;
-	}
+	// if (line->pos) {
+	// 	/* Note that line->vpc will be updated by this call */
+	// 	pqueue_change_priority(lm->victim_line_pq, line->vpc - 1, line);
+	// } else {
+	// 	line->vpc--;
+	// }
 
+	/* CBGC */
+	line->vpc--;
+	
 	if (was_full_line) {
 		/* move line: "full" -> "victim" */
-		list_del_init(&line->entry);
-		lm->full_line_cnt--;
+
 		/* Greedy */
+		// list_del_init(&line->entry);
 		// pqueue_insert(lm->victim_line_pq, line);
+
+		/* CBGC */
+		list_move_tail(&line->entry, &lm->victim_line_list);
+
+		lm->full_line_cnt--;
 		lm->victim_line_cnt++;
 	}
 }
@@ -621,6 +634,9 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 
 	mark_page_valid(conv_ftl, &new_ppa);
 
+	/* CBGC: update line timestamp */
+	conv_ftl->gc_wp.curline->last_update = ktime_get();
+
 	/* need to advance the write pointer here */
 	advance_write_pointer(conv_ftl, GC_IO);
 
@@ -656,35 +672,33 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 {
 	struct ssdparams *spp = &conv_ftl->ssd->sp;
 	struct line_mgmt *lm = &conv_ftl->lm;
-	struct line *pos = NULL;
 	struct line *victim_line = NULL;
+    
+    /* CBGC */
+	struct line *line = NULL;
 
 	double max_score = -1.0;
     ktime_t now = ktime_get();
-    
-    /* CBGC */
-
     /* Iteration */
-    list_for_each_entry(pos, &lm->full_line_list, entry) {
-        
-        /* Calculate utilization (u) */
-        double u = (double)pos->vpc / (double)spp->pgs_per_line;
-        
-        /* If all pages are invalid */
-        if (u == 0) {
-            victim_line = pos;
+    list_for_each_entry(line, &lm->victim_line_list, entry) {
+		/* If all pages are invalid */
+        if (line->vpc == 0) {
+            victim_line = line;
             break;
         }
 
+        /* Calculate Utilization (u) */
+        double u = (double)line->vpc / (double)spp->pgs_per_line;
+
         /* Calculate Age */
-        int64_t age = ktime_to_ns(ktime_sub(now, pos->last_update));
+        int64_t age = ktime_to_ns(ktime_sub(now, line->last_update));
         
         /* Calculate Score: ((1 - u) * Age) / u */
         double score = ((1.0 - u) * (double)age) / u;
 
         if (score > max_score) {
             max_score = score;
-            victim_line = pos;
+            victim_line = line;
         }
     }
 
@@ -695,14 +709,19 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 		return NULL;
 	}
 
-	if (!force && (victim_line->vpc > (spp->pgs_per_line / 8))) {
-		return NULL;
-	}
+	/* Greedy */
+	// if (!force && (victim_line->vpc > (spp->pgs_per_line / 8))) {
+	// 	return NULL;
+	// }
 
 	/* Greedy */
 	// pqueue_pop(lm->victim_line_pq);
 	// victim_line->pos = 0;
 	// lm->victim_line_cnt--;
+	
+	/* CBGC */
+	list_del_init(&victim_line->entry);
+    lm->victim_line_cnt--;
 
 	/* victim_line is a danggling node now */
 	return victim_line;
@@ -1038,8 +1057,6 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 		mark_page_valid(conv_ftl, &ppa);
 
 		/* CBGC: update line timestamp */
-		// struct line *line = get_line(conv_ftl, &ppa);
-		// line->last_update = ktime_get();
 		conv_ftl->wp.curline->last_update = ktime_get();
 
 		/* need to advance the write pointer here */

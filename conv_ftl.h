@@ -5,7 +5,8 @@
 
 #include <linux/ktime.h>
 #include <linux/types.h>
-#include "pqueue/pqueue.h"
+/* Greedy */
+// #include "pqueue/pqueue.h"
 #include "ssd_config.h"
 #include "ssd.h"
 
@@ -23,8 +24,10 @@ struct line {
 	int ipc; /* invalid page count in this line */
 	int vpc; /* valid page count in this line */
 	struct list_head entry;
+
+	/* Greedy */
 	/* position in the priority queue for victim lines */
-	size_t pos;
+	// size_t pos;
 
 	/* CBGC: timestamp */
 	ktime_t last_update;
@@ -45,14 +48,16 @@ struct line_mgmt {
 
 	/* free line list, we only need to maintain a list of blk numbers */
 	struct list_head free_line_list;
+	struct list_head full_line_list;
 	/* Greedy */
 	// pqueue_t *victim_line_pq;
-	struct list_head full_line_list;
+	/* CBGC */
+	struct list_head victim_line_list;
 
 	uint32_t tt_lines;
 	uint32_t free_line_cnt;
-	uint32_t victim_line_cnt;
 	uint32_t full_line_cnt;
+	uint32_t victim_line_cnt;
 };
 
 struct write_flow_control {
