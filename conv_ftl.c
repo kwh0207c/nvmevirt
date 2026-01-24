@@ -122,7 +122,7 @@ static void init_lines(struct conv_ftl *conv_ftl)
 	INIT_LIST_HEAD(&lm->free_line_list);
 	INIT_LIST_HEAD(&lm->full_line_list);
 
-	/* CBGC */
+	/* CBGC: Initialize victim line list */
 	INIT_LIST_HEAD(&lm->victim_line_list);
 
 	/* Greedy */
