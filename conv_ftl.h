@@ -49,8 +49,10 @@ struct line_mgmt {
 	/* free line list, we only need to maintain a list of blk numbers */
 	struct list_head free_line_list;
 	struct list_head full_line_list;
+
 	/* Greedy */
 	// pqueue_t *victim_line_pq;
+	
 	/* CBGC */
 	struct list_head victim_line_list;
 
