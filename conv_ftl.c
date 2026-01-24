@@ -121,9 +121,12 @@ static void init_lines(struct conv_ftl *conv_ftl)
 	INIT_LIST_HEAD(&lm->free_line_list);
 	INIT_LIST_HEAD(&lm->full_line_list);
 
-	lm->victim_line_pq = pqueue_init(spp->tt_lines, victim_line_cmp_pri, victim_line_get_pri,
-					 victim_line_set_pri, victim_line_get_pos,
-					 victim_line_set_pos);
+	/* Greedy */
+	// lm->victim_line_pq = pqueue_init(spp->tt_lines, victim_line_cmp_pri, victim_line_get_pri,
+	// 				 victim_line_set_pri, victim_line_get_pos,
+	// 				 victim_line_set_pos);
+
+	// 
 
 	lm->free_line_cnt = 0;
 	for (i = 0; i < lm->tt_lines; i++) {
@@ -133,6 +136,7 @@ static void init_lines(struct conv_ftl *conv_ftl)
 			.vpc = 0,
 			.pos = 0,
 			.entry = LIST_HEAD_INIT(lm->lines[i].entry),
+			.last_update = ktime_set(0, 0),
 		};
 
 		/* initialize all the lines as free lines */
@@ -147,7 +151,8 @@ static void init_lines(struct conv_ftl *conv_ftl)
 
 static void remove_lines(struct conv_ftl *conv_ftl)
 {
-	pqueue_free(conv_ftl->lm.victim_line_pq);
+	/* Greedy */
+	// pqueue_free(conv_ftl->lm.victim_line_pq);
 	vfree(conv_ftl->lm.lines);
 }
 
@@ -258,7 +263,10 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 		NVMEV_ASSERT(wpp->curline->vpc >= 0 && wpp->curline->vpc < spp->pgs_per_line);
 		/* there must be some invalid pages in this line */
 		NVMEV_ASSERT(wpp->curline->ipc > 0);
-		pqueue_insert(lm->victim_line_pq, wpp->curline);
+
+		/* Greedy */
+		// pqueue_insert(lm->victim_line_pq, wpp->curline);
+
 		lm->victim_line_cnt++;
 	}
 	/* current line is used up, pick another empty line */
@@ -517,8 +525,9 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 	NVMEV_ASSERT(line->vpc > 0 && line->vpc <= spp->pgs_per_line);
 	/* Adjust the position of the victime line in the pq under over-writes */
 	if (line->pos) {
+		/* Greedy */
 		/* Note that line->vpc will be updated by this call */
-		pqueue_change_priority(lm->victim_line_pq, line->vpc - 1, line);
+		// pqueue_change_priority(lm->victim_line_pq, line->vpc - 1, line);
 	} else {
 		line->vpc--;
 	}
@@ -527,7 +536,8 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 		/* move line: "full" -> "victim" */
 		list_del_init(&line->entry);
 		lm->full_line_cnt--;
-		pqueue_insert(lm->victim_line_pq, line);
+		/* Greedy */
+		// pqueue_insert(lm->victim_line_pq, line);
 		lm->victim_line_cnt++;
 	}
 }
@@ -646,9 +656,41 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 {
 	struct ssdparams *spp = &conv_ftl->ssd->sp;
 	struct line_mgmt *lm = &conv_ftl->lm;
+	struct line *pos = NULL;
 	struct line *victim_line = NULL;
 
-	victim_line = pqueue_peek(lm->victim_line_pq);
+	double max_score = -1.0;
+    ktime_t now = ktime_get();
+    
+    /* CBGC */
+
+    /* Iteration */
+    list_for_each_entry(pos, &lm->full_line_list, entry) {
+        
+        /* Calculate utilization (u) */
+        double u = (double)pos->vpc / (double)spp->pgs_per_line;
+        
+        /* If all pages are invalid */
+        if (u == 0) {
+            victim_line = pos;
+            break;
+        }
+
+        /* Calculate Age */
+        int64_t age = ktime_to_ns(ktime_sub(now, pos->last_update));
+        
+        /* Calculate Score: ((1 - u) * Age) / u */
+        double score = ((1.0 - u) * (double)age) / u;
+
+        if (score > max_score) {
+            max_score = score;
+            victim_line = pos;
+        }
+    }
+
+	/* Greedy */
+	// victim_line = pqueue_peek(lm->victim_line_pq);
+
 	if (!victim_line) {
 		return NULL;
 	}
@@ -657,9 +699,10 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 		return NULL;
 	}
 
-	pqueue_pop(lm->victim_line_pq);
-	victim_line->pos = 0;
-	lm->victim_line_cnt--;
+	/* Greedy */
+	// pqueue_pop(lm->victim_line_pq);
+	// victim_line->pos = 0;
+	// lm->victim_line_cnt--;
 
 	/* victim_line is a danggling node now */
 	return victim_line;
@@ -993,6 +1036,11 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 		set_rmap_ent(conv_ftl, local_lpn, &ppa);
 
 		mark_page_valid(conv_ftl, &ppa);
+
+		/* CBGC: update line timestamp */
+		// struct line *line = get_line(conv_ftl, &ppa);
+		// line->last_update = ktime_get();
+		conv_ftl->wp.curline->last_update = ktime_get();
 
 		/* need to advance the write pointer here */
 		advance_write_pointer(conv_ftl, USER_IO);

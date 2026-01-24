@@ -3,6 +3,7 @@
 #ifndef _NVMEVIRT_CONV_FTL_H
 #define _NVMEVIRT_CONV_FTL_H
 
+#include <linux/ktime.h>
 #include <linux/types.h>
 #include "pqueue/pqueue.h"
 #include "ssd_config.h"
@@ -24,6 +25,9 @@ struct line {
 	struct list_head entry;
 	/* position in the priority queue for victim lines */
 	size_t pos;
+
+	/* CBGC: timestamp */
+	ktime_t last_update;
 };
 
 /* wp: record next write addr */
@@ -41,7 +45,8 @@ struct line_mgmt {
 
 	/* free line list, we only need to maintain a list of blk numbers */
 	struct list_head free_line_list;
-	pqueue_t *victim_line_pq;
+	/* Greedy */
+	// pqueue_t *victim_line_pq;
 	struct list_head full_line_list;
 
 	uint32_t tt_lines;
