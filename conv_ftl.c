@@ -1148,6 +1148,9 @@ static void conv_flush(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 	uint32_t i;
 	struct conv_ftl *conv_ftls = (struct conv_ftl *)ns->ftls;
 
+	// Flush Command Log
+	
+
 	start = local_clock();
 	latest = start;
 	for (i = 0; i < ns->nr_parts; i++) {

@@ -71,12 +71,12 @@ enum {
 #define CELL_MODE (CELL_MODE_TLC)
 
 #define SSD_PARTITIONS (4)
-#define NAND_CHANNELS (8)
-#define LUNS_PER_NAND_CH (2)
+#define NAND_CHANNELS (4)
+#define LUNS_PER_NAND_CH (4)
 #define PLNS_PER_LUN (1)
 #define FLASH_PAGE_SIZE KB(32)
 #define ONESHOT_PAGE_SIZE (FLASH_PAGE_SIZE * 3)
-#define BLKS_PER_PLN (8192)
+#define BLKS_PER_PLN (1024)
 #define BLK_SIZE (0) /*BLKS_PER_PLN should not be 0 */
 static_assert((ONESHOT_PAGE_SIZE % FLASH_PAGE_SIZE) == 0);
 
