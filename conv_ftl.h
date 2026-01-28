@@ -5,10 +5,72 @@
 
 #include <linux/ktime.h>
 #include <linux/types.h>
-/* Greedy */
-// #include "pqueue/pqueue.h"
 #include "ssd_config.h"
 #include "ssd.h"
+
+
+#define GC_GREEDY 1
+#define GC_CB 2
+#define GC_RANDOM 3
+
+#define GC_TYPE (GC_GREEDY)
+
+
+
+#if (GC_TYPE == GC_GREEDY)
+#include "pqueue/pqueue.h"
+struct line {
+	int id; /* line id, the same as corresponding block id */
+	int ipc; /* invalid page count in this line */
+	int vpc; /* valid page count in this line */
+	struct list_head entry;
+	/* position in the priority queue for victim lines */
+	size_t pos;
+};
+
+struct line_mgmt {
+	struct line *lines;
+
+	/* free line list, we only need to maintain a list of blk numbers */
+	struct list_head free_line_list;
+	pqueue_t *victim_line_pq;
+	struct list_head full_line_list;
+
+	uint32_t tt_lines;
+	uint32_t free_line_cnt;
+	uint32_t victim_line_cnt;
+	uint32_t full_line_cnt;
+};
+
+
+#elif ((GC_TYPE == GC_CB) || (GC_TYPE == GC_RANDOM))
+struct line {
+	int id; /* line id, the same as corresponding block id */
+	int ipc; /* invalid page count in this line */
+	int vpc; /* valid page count in this line */
+	struct list_head entry;
+
+	/* CBGC: timestamp */
+	ktime_t last_update;
+};
+
+struct line_mgmt {
+	struct line *lines;
+
+	/* free line list, we only need to maintain a list of blk numbers */
+	struct list_head free_line_list;
+	struct list_head full_line_list;
+
+	/* CBGC */
+	struct list_head victim_line_list;
+
+	uint32_t tt_lines;
+	uint32_t free_line_cnt;
+	uint32_t full_line_cnt;
+	uint32_t victim_line_cnt;
+};
+
+#endif
 
 struct convparams {
 	uint32_t gc_thres_lines;
@@ -19,19 +81,6 @@ struct convparams {
 	int pba_pcent; /* (physical space / logical space) * 100*/
 };
 
-struct line {
-	int id; /* line id, the same as corresponding block id */
-	int ipc; /* invalid page count in this line */
-	int vpc; /* valid page count in this line */
-	struct list_head entry;
-
-	/* Greedy */
-	/* position in the priority queue for victim lines */
-	// size_t pos;
-
-	/* CBGC: timestamp */
-	ktime_t last_update;
-};
 
 /* wp: record next write addr */
 struct write_pointer {
@@ -41,25 +90,6 @@ struct write_pointer {
 	uint32_t pg;
 	uint32_t blk;
 	uint32_t pl;
-};
-
-struct line_mgmt {
-	struct line *lines;
-
-	/* free line list, we only need to maintain a list of blk numbers */
-	struct list_head free_line_list;
-	struct list_head full_line_list;
-
-	/* Greedy */
-	// pqueue_t *victim_line_pq;
-	
-	/* CBGC */
-	struct list_head victim_line_list;
-
-	uint32_t tt_lines;
-	uint32_t free_line_cnt;
-	uint32_t full_line_cnt;
-	uint32_t victim_line_cnt;
 };
 
 struct write_flow_control {
