@@ -680,6 +680,12 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 	
 	/* Debug */
 	conv_ftl->svl_called_count++;
+	if (conv_ftl->svl_called_count == 1) {
+		NVMEV_DEBUG_VERBOSE("GC: First\n")
+	} 
+	else if (conv_ftl->svl_called_count == 10) {
+		NVMEV_DEBUG_VERBOSE("GC: Ten\n")
+	}
 
 	/*
 	victim line selection logic
@@ -1133,7 +1139,7 @@ static void conv_flush(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 	}
 
 	NVMEV_DEBUG_VERBOSE("%s: latency=%llu\n", __func__, latest - start);
-		NVMEV_DEBUG_VERBOSE("svl called count : %u", svl_tot);
+		NVMEV_DEBUG_VERBOSE("svl called count : %u\n", svl_tot);
 
 	ret->status = NVME_SC_SUCCESS;
 	ret->nsecs_target = latest;
