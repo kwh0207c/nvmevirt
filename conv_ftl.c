@@ -262,7 +262,7 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 		/* there must be some invalid pages in this line */
 		NVMEV_ASSERT(wpp->curline->ipc > 0);
 		
-		#if (GC_MODE == GC_GREEDY)
+		#if (GC_MODE == GC_MODE_GREEDY)
 		pqueue_insert(lm->victim_line_pq, wpp->curline);
 		#else
 		list_append(lm->victim_line_pq, wpp->curline);
@@ -525,7 +525,7 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 	line->ipc++;
 	NVMEV_ASSERT(line->vpc > 0 && line->vpc <= spp->pgs_per_line);
 
-	#if (GC_MODE == GC_GREEDY)
+	#if (GC_MODE == GC_MODE_GREEDY)
 	/* Adjust the position of the victime line in the pq under over-writes */
 	if (line->pos) {
 		/* Note that line->vpc will be updated by this call */
@@ -542,7 +542,7 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 		list_del_init(&line->entry);
 		lm->full_line_cnt--;
 
-		#if (GC_MODE == GC_GREEDY)
+		#if (GC_MODE == GC_MODE_GREEDY)
 		pqueue_insert(lm->victim_line_pq, line);
 		#else
 		list_remove(lm->victim_line_pq, line);
