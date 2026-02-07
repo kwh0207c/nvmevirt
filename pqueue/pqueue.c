@@ -128,6 +128,27 @@ int pqueue_insert(pqueue_t *q, void *d)
 	return 0;
 }
 
+int list_append(pqueue_t *q, void *d)
+{
+	/*
+	Method to treat pq like list
+	*/
+	size_t i;
+
+    if (!q)
+        return 1;
+
+    if (q->size >= q->avail) {
+        NVMEV_ERROR("Need more space in pqueue\n");
+    }
+
+    i = q->size++;
+    q->d[i] = d;
+    q->setpos(d, i);
+
+    return 0;
+}
+
 void pqueue_change_priority(pqueue_t *q, pqueue_pri_t new_pri, void *d)
 {
 	size_t posn;
@@ -151,6 +172,21 @@ int pqueue_remove(pqueue_t *q, void *d)
 		percolate_down(q, posn);
 
 	return 0;
+}
+
+int list_remove(pqueue_t *q, void *d)
+{
+	/*
+	Method to treat pq like list
+	*/
+    size_t posn = q->getpos(d);
+    q->d[posn] = q->d[--q->size];
+    
+    if (posn < q->size) {
+        q->setpos(q->d[posn], posn);
+    }
+
+    return 0;
 }
 
 void *pqueue_pop(pqueue_t *q)

@@ -80,6 +80,8 @@ size_t pqueue_size(pqueue_t *q);
  */
 int pqueue_insert(pqueue_t *q, void *d);
 
+int list_append(pqueue_t *q, void *d);
+
 /**
  * move an existing entry to a different priority
  * @param q the queue
@@ -102,6 +104,8 @@ void *pqueue_pop(pqueue_t *q);
  * @return 0 on success
  */
 int pqueue_remove(pqueue_t *q, void *d);
+
+int list_remove(pqueue_t *q, void *d);
 
 /**
  * access highest-ranking item without removing it.

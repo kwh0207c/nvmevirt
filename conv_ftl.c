@@ -3,6 +3,7 @@
 #include <linux/vmalloc.h>
 #include <linux/ktime.h>
 #include <linux/sched/clock.h>
+#include <linux/random.h>
 
 #include "nvmev.h"
 #include "conv_ftl.h"
@@ -133,6 +134,7 @@ static void init_lines(struct conv_ftl *conv_ftl)
 			.vpc = 0,
 			.pos = 0,
 			.entry = LIST_HEAD_INIT(lm->lines[i].entry),
+			.last_update = ktime_set(0, 0),
 		};
 
 		/* initialize all the lines as free lines */
@@ -253,12 +255,19 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 		list_add_tail(&wpp->curline->entry, &lm->full_line_list);
 		lm->full_line_cnt++;
 		NVMEV_DEBUG_VERBOSE("wpp: move line to full_line_list\n");
-	} else {
+	} 
+	else {
 		NVMEV_DEBUG_VERBOSE("wpp: line is moved to victim list\n");
 		NVMEV_ASSERT(wpp->curline->vpc >= 0 && wpp->curline->vpc < spp->pgs_per_line);
 		/* there must be some invalid pages in this line */
 		NVMEV_ASSERT(wpp->curline->ipc > 0);
+		
+		#if (GC_MODE == GC_GREEDY)
 		pqueue_insert(lm->victim_line_pq, wpp->curline);
+		#else
+		list_append(lm->victim_line_pq, wpp->curline);
+		#endif
+
 		lm->victim_line_cnt++;
 	}
 	/* current line is used up, pick another empty line */
@@ -515,6 +524,8 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 	}
 	line->ipc++;
 	NVMEV_ASSERT(line->vpc > 0 && line->vpc <= spp->pgs_per_line);
+
+	#if (GC_MODE == GC_GREEDY)
 	/* Adjust the position of the victime line in the pq under over-writes */
 	if (line->pos) {
 		/* Note that line->vpc will be updated by this call */
@@ -522,12 +533,21 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 	} else {
 		line->vpc--;
 	}
-
+	#else
+	line->vpc--;
+	#endif
+	
 	if (was_full_line) {
-		/* move line: "full" -> "victim" */
+		/* move line: "full" -> "victim" */	
 		list_del_init(&line->entry);
 		lm->full_line_cnt--;
+
+		#if (GC_MODE == GC_GREEDY)
 		pqueue_insert(lm->victim_line_pq, line);
+		#else
+		list_remove(lm->victim_line_pq, line);
+		#endif
+		
 		lm->victim_line_cnt++;
 	}
 }
@@ -611,6 +631,11 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 
 	mark_page_valid(conv_ftl, &new_ppa);
 
+	#if (GC_MODE == GC_MODE_CB)
+	/* CBGC: update line timestamp */
+	conv_ftl->gc_wp.curline->last_update = ktime_get();
+	#endif
+
 	/* need to advance the write pointer here */
 	advance_write_pointer(conv_ftl, GC_IO);
 
@@ -631,13 +656,13 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 	}
 
 	/* advance per-ch gc_endtime as well */
-#if 0
+	#if 0
 	new_ch = get_ch(conv_ftl, &new_ppa);
 	new_ch->gc_endtime = new_ch->next_ch_avail_time;
 
 	new_lun = get_lun(conv_ftl, &new_ppa);
 	new_lun->gc_endtime = new_lun->next_lun_avail_time;
-#endif
+	#endif
 
 	return 0;
 }
@@ -646,18 +671,75 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 {
 	struct ssdparams *spp = &conv_ftl->ssd->sp;
 	struct line_mgmt *lm = &conv_ftl->lm;
+	pqueue_t *pq = lm->victim_line_pq;
+
 	struct line *victim_line = NULL;
 
-	victim_line = pqueue_peek(lm->victim_line_pq);
+	/*
+	victim line selection logic
+	*/
+	#if (GC_MODE == GC_MODE_GREEDY)
+	victim_line = pqueue_peek(pq);
+
+	#elif (GC_MODE == GC_MODE_CB)
+	uint64_t total_pages = spp->pgs_per_line;
+    ktime_t now = ktime_get();
+
+	struct line *line = NULL;
+	uint64_t max_score = 0;
+
+    /* Iteration */
+    for (size_t i = 1; i < pq->size; i++) {
+		line = (struct line *)pq->d[i];
+
+		/* If all pages are invalid */		
+		uint64_t vpc = (uint64_t)line->vpc;
+        if (vpc == 0) {
+            victim_line = line;
+            break;
+        }
+
+        /* Calculate Age */
+        uint64_t age = (uint64_t) ktime_to_ns(ktime_sub(now, line->last_update));
+        
+        /* Calculate Score: ((1 - u) * Age) / u */
+		uint64_t numerator = (total_pages - vpc) * age;
+        uint64_t score = div64_u64(numerator, vpc);
+
+        if (score > max_score) {
+            max_score = score;
+            victim_line = line;
+        }
+    }
+
+	#elif (GC_MODE == GC_MODE_RANDOM)
+	pqueue_t *pq = conv_ftl->lm.victim_line_pq;
+	size_t num_elements = pqueue_size(pq);
+	size_t random_idx;
+
+	if (num_elements > 0) {
+		random_idx = 1 + (get_random_u32() % num_elements);
+		victim_line = (struct line *)pq->d[random_idx];
+	}
+
+	#endif
+
 	if (!victim_line) {
 		return NULL;
 	}
 
+	/*
+	remove victim line from queue
+	*/
+	#if (GC_MODE == GC_MODE_GREEDY)
 	if (!force && (victim_line->vpc > (spp->pgs_per_line / 8))) {
 		return NULL;
 	}
+	pqueue_pop(pq);
+	#else
+	list_remove(pq, victim_line);
+	#endif
 
-	pqueue_pop(lm->victim_line_pq);
 	victim_line->pos = 0;
 	lm->victim_line_cnt--;
 
@@ -993,6 +1075,11 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 		set_rmap_ent(conv_ftl, local_lpn, &ppa);
 
 		mark_page_valid(conv_ftl, &ppa);
+
+		#if (GC_MODE == GC_MODE_CB)
+		/* CBGC: update line timestamp */
+		conv_ftl->gc_wp.curline->last_update = ktime_get();
+		#endif
 
 		/* need to advance the write pointer here */
 		advance_write_pointer(conv_ftl, USER_IO);
