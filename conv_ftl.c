@@ -145,6 +145,9 @@ static void init_lines(struct conv_ftl *conv_ftl)
 	NVMEV_ASSERT(lm->free_line_cnt == lm->tt_lines);
 	lm->victim_line_cnt = 0;
 	lm->full_line_cnt = 0;
+
+	/* Debug */
+	conv_ftl->svl_called_count = 0;
 }
 
 static void remove_lines(struct conv_ftl *conv_ftl)
@@ -545,7 +548,7 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 		#if (GC_MODE == GC_MODE_GREEDY)
 		pqueue_insert(lm->victim_line_pq, line);
 		#else
-		list_remove(lm->victim_line_pq, line);
+		list_append(lm->victim_line_pq, line);
 		#endif
 		
 		lm->victim_line_cnt++;
@@ -674,6 +677,9 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 	pqueue_t *pq = lm->victim_line_pq;
 
 	struct line *victim_line = NULL;
+	
+	/* Debug */
+	conv_ftl->svl_called_count++;
 
 	/*
 	victim line selection logic
@@ -1117,13 +1123,17 @@ static void conv_flush(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 	uint32_t i;
 	struct conv_ftl *conv_ftls = (struct conv_ftl *)ns->ftls;
 
+	uint32_t svl_tot_called = 0;
+
 	start = local_clock();
 	latest = start;
 	for (i = 0; i < ns->nr_parts; i++) {
 		latest = max(latest, ssd_next_idle_time(conv_ftls[i].ssd));
+		svl_tot_called += conv_ftls[i].svl_called_count;
 	}
 
 	NVMEV_DEBUG_VERBOSE("%s: latency=%llu\n", __func__, latest - start);
+		NVMEV_DEBUG_VERBOSE("svl called count : %u", svl_tot);
 
 	ret->status = NVME_SC_SUCCESS;
 	ret->nsecs_target = latest;
