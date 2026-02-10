@@ -719,7 +719,7 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
         uint64_t score = div64_u64(numerator, vpc);
 
         if (score > max_score) {
-            max_score = score;
+            max_score = score; 
             victim_line = line;
         }
     }
