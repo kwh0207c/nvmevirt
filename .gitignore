@@ -170,4 +170,4 @@ sphinx_*/
 /rust-project.json
 
 # Local makefile
-Makefile.local
+# Makefile.local
