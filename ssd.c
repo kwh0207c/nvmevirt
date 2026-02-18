@@ -393,14 +393,8 @@ uint64_t ssd_advance_nand(struct ssd *ssd, struct nand_cmd *ncmd)
 
 		if (ncmd->xfer_size == 4096) {
 			nand_etime = nand_stime + spp->pg_4kb_rd_lat[cell];
-		} 
-		else {
-			if (ncmd->is_slc) {
-				nand_etime = nand_stime + NAND_READ_LATENCY_SLC;
-			}
-			else {
-				nand_etime = nand_stime + spp->pg_rd_lat[cell];
-			}
+		} else {
+			nand_etime = nand_stime + spp->pg_rd_lat[cell];
 		}
 
 		/* read: then data transfer through channel */
@@ -426,17 +420,12 @@ uint64_t ssd_advance_nand(struct ssd *ssd, struct nand_cmd *ncmd)
 	case NAND_WRITE:
 		/* write: transfer data through channel first */
 		chnl_stime = max(lun->next_lun_avail_time, cmd_stime);
-		chnl_etime = chmodel_request(ch->perf_model, chnl_stime, ncmd->xfer_size);
 
-		if (ncmd->is_slc) {
-            nand_etime = nand_stime + NAND_PROG_LATENCY_SLC;
-        } 
-		else {
-            nand_etime = nand_stime + spp->pg_wr_lat;
-        }
+		chnl_etime = chmodel_request(ch->perf_model, chnl_stime, ncmd->xfer_size);
 
 		/* write: then do NAND program */
 		nand_stime = chnl_etime;
+		nand_etime = nand_stime + spp->pg_wr_lat;
 		lun->next_lun_avail_time = nand_etime;
 		completed_time = nand_etime;
 		break;

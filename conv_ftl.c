@@ -704,7 +704,7 @@ static void gc_read_page(struct conv_ftl *conv_ftl, struct ppa *ppa)
 			.xfer_size = spp->pgsz,
 			.interleave_pci_dma = false,
 			.ppa = ppa,
-			.is_slc = line->is_slc,
+			// .is_slc = line->is_slc,
 		};
 		ssd_advance_nand(conv_ftl->ssd, &gcr);
 	}
@@ -742,7 +742,7 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 			.stime = 0,
 			.interleave_pci_dma = false,
 			.ppa = &new_ppa,
-			.is_slc = false,  /* SLCB: Destination is TLC */
+			// .is_slc = false,  /* SLCB: Destination is TLC */
 		};
 		if (last_pg_in_wordline(conv_ftl, &new_ppa)) {
 			gcw.cmd = NAND_WRITE;
@@ -929,7 +929,7 @@ static void clean_one_flashpg(struct conv_ftl *conv_ftl, struct ppa *ppa)
 			.xfer_size = spp->pgsz * cnt,
 			.interleave_pci_dma = false,
 			.ppa = &ppa_copy,
-			.is_slc = line->is_slc,
+			// .is_slc = line->is_slc,
 		};
 		completed_time = ssd_advance_nand(conv_ftl->ssd, &gcr);
 	}
@@ -1115,9 +1115,9 @@ static bool conv_read(struct nvmev_ns *ns, struct nvmev_request *req, struct nvm
 			if (xfer_size > 0) {
 				/* SLCB */
                 struct line *line = get_line(conv_ftl, &prev_ppa);
-                srd.is_slc = line->is_slc;
+                // srd.is_slc = line->is_slc;
                 
-                if (srd.is_slc) {
+                if (line->is_slc) {
                     srd.xfer_size = max((uint64_t)xfer_size, (uint64_t)SLC_ONESHOT_PAGE_SIZE);
                 } 
 				else {
@@ -1137,9 +1137,9 @@ static bool conv_read(struct nvmev_ns *ns, struct nvmev_request *req, struct nvm
 		if (xfer_size > 0) {
 			/* SLCB */
 			struct line *line = get_line(conv_ftl, &prev_ppa);
-			srd.is_slc = line->is_slc;
+			// srd.is_slc = line->is_slc;
 			
-			if (srd.is_slc) {
+			if (line->is_slc) {
 				srd.xfer_size = max((uint64_t)xfer_size, (uint64_t)SLC_ONESHOT_PAGE_SIZE);
 			} 
 			else {
@@ -1225,11 +1225,11 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 		struct line *cur_line = get_line(conv_ftl, &ppa);
 		if (cur_line->is_slc) {
 			swr.xfer_size = SLC_ONESHOT_PAGE_SIZE; // SLC
-			swr.is_slc = true;
+			// swr.is_slc = true;
 		} 
 		else {
 			swr.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg; // TLC
-			swr.is_slc = false;
+			// swr.is_slc = false;
 		}
 
 		/* update maptbl */
