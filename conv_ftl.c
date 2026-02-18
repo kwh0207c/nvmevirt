@@ -186,7 +186,7 @@ static void init_lines(struct conv_ftl *conv_ftl)
 		}
 	}
 
-	NVMEV_ASSERT(lm->free_line_cnt == lm->tt_lines);
+	NVMEV_ASSERT((lm->free_line_cnt + lm->slc_free_line_cnt) == lm->tt_lines);
 	lm->victim_line_cnt = 0;
 	lm->full_line_cnt = 0;
 
@@ -220,7 +220,6 @@ static inline void check_addr(int a, int max)
 static struct line *get_next_free_line(struct conv_ftl *conv_ftl, bool is_slc)
 {
 	/* SLCB */
-
 	struct line_mgmt *lm = &conv_ftl->lm;
 
 	struct list_head *target_list = is_slc ? &lm->slc_free_line_list : &lm->free_line_list;
@@ -266,6 +265,12 @@ static void prepare_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
     if (!curline && is_slc) {
         curline = get_next_free_line(conv_ftl, false);
     }
+
+	/* SLCB: null check (may never called) */
+	if (!curline) {
+		NVMEV_ERROR("Failed to allocate initial write pointer!\n");
+		return;
+	}
 
 	/* wp->curline is always our next-to-write super-block */
 	*wp = (struct write_pointer){
