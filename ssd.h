@@ -129,6 +129,7 @@ struct nand_cmd {
 	uint64_t stime; /* Coperd: request arrival time */
 	bool interleave_pci_dma;
 	struct ppa *ppa;
+	bool is_slc;
 };
 
 struct buffer {
