@@ -73,9 +73,10 @@ struct line_mgmt {
 	#else
 	struct list_head slc_victim_line_list;
     struct list_head victim_line_list;
-	uint32_t slc_victim_line_cnt;
-
+	
 	#endif
+
+	uint32_t slc_victim_line_cnt;
     uint32_t victim_line_cnt;
 };
 

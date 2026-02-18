@@ -151,7 +151,6 @@ static void init_lines(struct conv_ftl *conv_ftl)
 	#else
 	INIT_LIST_HEAD(&lm->slc_victim_line_list);
 	INIT_LIST_HEAD(&lm->victim_line_list);
-	lm->slc_victim_line_cnt = 0;
 
 	#endif
 
@@ -188,6 +187,7 @@ static void init_lines(struct conv_ftl *conv_ftl)
 
 	NVMEV_ASSERT((lm->free_line_cnt + lm->slc_free_line_cnt) == lm->tt_lines);
 	lm->victim_line_cnt = 0;
+	lm->slc_victim_line_cnt = 0;
 	lm->full_line_cnt = 0;
 
 	/* Debug */
@@ -333,7 +333,13 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 		
 		#if (GC_MODE == GC_MODE_GREEDY)
 		pqueue_insert(lm->victim_line_pq, wpp->curline);
-		lm->victim_line_cnt++;
+		if (wpp->curline->is_slc) {
+			lm->slc_victim_line_cnt++;
+		}
+		else {
+			lm->victim_line_cnt++;
+		}
+
 		#else
 		if (wpp->curline->is_slc) {
 			list_add_tail(&wpp->curline->entry, &lm->slc_victim_line_list);
@@ -343,6 +349,7 @@ static void advance_write_pointer(struct conv_ftl *conv_ftl, uint32_t io_type)
 			list_add_tail(&wpp->curline->entry, &lm->victim_line_list);
 			lm->victim_line_cnt++;
 		}
+
 		#endif
 	}
 
@@ -631,7 +638,12 @@ static void mark_page_invalid(struct conv_ftl *conv_ftl, struct ppa *ppa)
 
 		#if (GC_MODE == GC_MODE_GREEDY)
 		pqueue_insert(lm->victim_line_pq, line);
-		lm->victim_line_cnt++;
+		if (line->is_slc) {
+			lm->slc_victim_line_cnt++;
+		}
+		else {
+			lm->victim_line_cnt++;
+		}
 
 		#else
 		/* SLCB */
@@ -709,7 +721,7 @@ static void gc_read_page(struct conv_ftl *conv_ftl, struct ppa *ppa)
 			.xfer_size = spp->pgsz,
 			.interleave_pci_dma = false,
 			.ppa = ppa,
-			.is_slc = line->is_slc,
+			.is_slc = line->is_slc,  /* SLCB */
 		};
 		ssd_advance_nand(conv_ftl->ssd, &gcr);
 	}
@@ -741,17 +753,25 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 	advance_write_pointer(conv_ftl, GC_IO);
 
 	if (cpp->enable_gc_delay) {
+		struct line *dest_line = conv_ftl->gc_wp.curline; /* SLCB: Identify destination line */
 		struct nand_cmd gcw = {
 			.type = GC_IO,
 			.cmd = NAND_NOP,
 			.stime = 0,
 			.interleave_pci_dma = false,
 			.ppa = &new_ppa,
-			.is_slc = false,  /* SLCB: Destination is TLC */
+			.is_slc = dest_line->is_slc,  /* SLCB */
 		};
+
 		if (last_pg_in_wordline(conv_ftl, &new_ppa)) {
 			gcw.cmd = NAND_WRITE;
-			gcw.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
+			/* SLCB: Use region-specific xfer_size */
+			if (gcw.is_slc) {
+                gcw.xfer_size = SLC_ONESHOT_PAGE_SIZE; 
+            } 
+			else {
+                gcw.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
+            }
 		}
 
 		ssd_advance_nand(conv_ftl->ssd, &gcw);
@@ -823,7 +843,7 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 		uint64_t numerator = (total_pages - vpc) * age;
         uint64_t score = div64_u64(numerator, vpc);
 
-        if (score > max_score) {
+        if (score >= max_score) {
             max_score = score; 
             victim_line = line;
         }
@@ -831,7 +851,6 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 
 	#elif (GC_MODE == GC_MODE_RANDOM)
 	struct line *line = NULL;
-	uint64_t max_score = 0;
     
 	if (*target_line_cnt > 0) {
 		uint32_t random_idx = (get_random_u32() % (*target_line_cnt));
@@ -862,7 +881,13 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 	}
 	pqueue_pop(lm->victim_line_pq);
 	victim_line->pos = 0;
-	lm->victim_line_cnt--;
+
+	if (victim_line->is_slc) {
+        lm->slc_victim_line_cnt--;
+    } 
+	else {
+        lm->victim_line_cnt--;
+    }
 
 	#else
 	list_del_init(&victim_line->entry);
