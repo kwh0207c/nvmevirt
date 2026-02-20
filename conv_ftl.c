@@ -17,13 +17,13 @@ static inline bool last_pg_in_wordline(struct conv_ftl *conv_ftl, struct ppa *pp
 static bool should_gc(struct conv_ftl *conv_ftl)
 {
 	return (conv_ftl->lm.free_line_cnt <= conv_ftl->cp.gc_thres_lines) ||
-	(conv_ftl->lm.slc_free_line_cnt <= SLC_GC_THRESHOLD);
+	(conv_ftl->lm.slc_free_line_cnt < conv_ftl->cp.slc_gc_thres_lines);
 }
 
 static inline bool should_gc_high(struct conv_ftl *conv_ftl)
 {
 	return conv_ftl->lm.free_line_cnt <= conv_ftl->cp.gc_thres_lines_high ||
-	(conv_ftl->lm.slc_free_line_cnt <= SLC_GC_THRESHOLD_HIGH);
+	(conv_ftl->lm.slc_free_line_cnt < conv_ftl->cp.slc_gc_thres_lines_high);
 }
 
 static inline struct ppa get_maptbl_ent(struct conv_ftl *conv_ftl, uint64_t lpn)
@@ -478,6 +478,17 @@ static void conv_init_params(struct convparams *cpp)
 	cpp->gc_thres_lines_high = 2; /* Need only two lines.(host write, gc)*/
 	cpp->enable_gc_delay = 1;
 	cpp->pba_pcent = (int)((1 + cpp->op_area_pcent) * 100);
+
+	/* SLCB */
+	#if (SLC_PORTION == 0)
+	cpp->gc_thres_lines = 0;
+	cpp->gc_thres_lines_high = 0;
+
+	#else
+	cpp->gc_thres_lines = 3;
+	cpp->gc_thres_lines_high = 3;
+
+	#endif
 }
 
 void conv_init_namespace(struct nvmev_ns *ns, uint32_t id, uint64_t size, void *mapped_addr,
@@ -766,12 +777,15 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 		if (last_pg_in_wordline(conv_ftl, &new_ppa)) {
 			gcw.cmd = NAND_WRITE;
 			/* SLCB: Use region-specific xfer_size */
+			gcw.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
+			/*
 			if (gcw.is_slc) {
                 gcw.xfer_size = SLC_ONESHOT_PAGE_SIZE; 
             } 
 			else {
                 gcw.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
             }
+			*/
 		}
 
 		ssd_advance_nand(conv_ftl->ssd, &gcw);
@@ -1146,13 +1160,16 @@ static bool conv_read(struct nvmev_ns *ns, struct nvmev_request *req, struct nvm
 				/* SLCB */
                 struct line *line = get_line(conv_ftl, &prev_ppa);
                 srd.is_slc = line->is_slc;
-                
+				
+				srd.xfer_size = xfer_size;
+				/*
                 if (line->is_slc) {
                     srd.xfer_size = max((uint64_t)xfer_size, (uint64_t)SLC_ONESHOT_PAGE_SIZE);
                 } 
 				else {
                     srd.xfer_size = max((uint64_t)xfer_size, (uint64_t)(spp->pgsz * spp->pgs_per_oneshotpg));
                 }
+				*/
 
 				srd.ppa = &prev_ppa;
 				nsecs_completed = ssd_advance_nand(conv_ftl->ssd, &srd);
@@ -1169,12 +1186,15 @@ static bool conv_read(struct nvmev_ns *ns, struct nvmev_request *req, struct nvm
 			struct line *line = get_line(conv_ftl, &prev_ppa);
 			srd.is_slc = line->is_slc;
 			
+			srd.xfer_size = xfer_size;
+			/*
 			if (line->is_slc) {
 				srd.xfer_size = max((uint64_t)xfer_size, (uint64_t)SLC_ONESHOT_PAGE_SIZE);
 			} 
 			else {
 				srd.xfer_size = max((uint64_t)xfer_size, (uint64_t)(spp->pgsz * spp->pgs_per_oneshotpg));
 			}
+			*/
 
 			srd.ppa = &prev_ppa;
 			nsecs_completed = ssd_advance_nand(conv_ftl->ssd, &srd);
@@ -1253,6 +1273,8 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 
 		/* SLCB: set xfer_size */
 		struct line *cur_line = get_line(conv_ftl, &ppa);
+		swr.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
+		/*
 		if (cur_line->is_slc) {
 			swr.xfer_size = SLC_ONESHOT_PAGE_SIZE; // SLC
 			swr.is_slc = true;
@@ -1261,6 +1283,7 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 			swr.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg; // TLC
 			swr.is_slc = false;
 		}
+		*/
 
 		/* update maptbl */
 		set_maptbl_ent(conv_ftl, local_lpn, &ppa);

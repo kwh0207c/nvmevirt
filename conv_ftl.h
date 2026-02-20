@@ -28,6 +28,10 @@ struct convparams {
 
 	double op_area_pcent;
 	int pba_pcent; /* (physical space / logical space) * 100*/
+
+	/* SLCB */
+	uint32_t slc_gc_thres_lines;
+	uint32_t slc_gc_thres_lines_high;
 };
 
 struct line {
