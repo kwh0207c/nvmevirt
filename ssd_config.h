@@ -109,7 +109,7 @@ static_assert((ONESHOT_PAGE_SIZE % FLASH_PAGE_SIZE) == 0);
 
 
 // SLC buffer settings
-#define SLC_PORTION (0)
+#define SLC_PORTION (20)
 #define SLC_BLKS (BLKS_PER_PLN * SLC_PORTION / 100)
 #define SLC_ONESHOT_PAGE_SIZE KB(32)
 #define NAND_4KB_READ_LATENCY_SLC (1)

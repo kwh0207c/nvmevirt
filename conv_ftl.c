@@ -812,7 +812,7 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 	
 	/* Debug */
 	conv_ftl->svl_called_count++;
-
+	NVMEV_INFO("SVL\n");
 
 	#if (GC_MODE != GC_MODE_GREEDY)
 	struct list_head *target_line_list;
@@ -1011,6 +1011,7 @@ static void mark_line_free(struct conv_ftl *conv_ftl, struct ppa *ppa)
 
 static int do_gc(struct conv_ftl *conv_ftl, bool force)
 {
+	NVMEV_INFO("GC enabled");
 	struct line *victim_line = NULL;
 	struct ssdparams *spp = &conv_ftl->ssd->sp;
 	struct ppa ppa;
@@ -1343,8 +1344,9 @@ static void conv_flush(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 		svl_tot_called += conv_ftls[i].svl_called_count;
 	}
 
-	NVMEV_DEBUG_VERBOSE("%s: latency=%llu\n", __func__, latest - start);
-	NVMEV_DEBUG_VERBOSE("svl called count : %u\n", svl_tot_called);
+	NVMEV_INFO("DEBUG\n");
+	NVMEV_INFO("%s: latency=%llu\n", __func__, latest - start);
+	NVMEV_INFO("svl called count : %u\n", svl_tot_called);
 
 	ret->status = NVME_SC_SUCCESS;
 	ret->nsecs_target = latest;
