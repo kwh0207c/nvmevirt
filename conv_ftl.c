@@ -479,14 +479,18 @@ static void conv_init_params(struct convparams *cpp)
 	cpp->enable_gc_delay = 1;
 	cpp->pba_pcent = (int)((1 + cpp->op_area_pcent) * 100);
 
+	/* TEST */
+	cpp->gc_thres_lines = GC_THRESHOLD;
+	cpp->gc_thres_lines_high = GC_THRESHOLD_HIGH;
+
 	/* SLCB */
 	#if (SLC_PORTION == 0)
-	cpp->gc_thres_lines = 0;
-	cpp->gc_thres_lines_high = 0;
+	cpp->slc_gc_thres_lines = 0;
+	cpp->slc_gc_thres_lines_high = 0;
 
 	#else
-	cpp->gc_thres_lines = 3;
-	cpp->gc_thres_lines_high = 3;
+	cpp->slc_gc_thres_lines = SLC_GC_THRESHOLD;
+	cpp->slc_gc_thres_lines_high = SLC_GC_THRESHOLD_HIGH;
 
 	#endif
 }
@@ -812,7 +816,6 @@ static struct line *select_victim_line(struct conv_ftl *conv_ftl, bool force)
 	
 	/* Debug */
 	conv_ftl->svl_called_count++;
-	NVMEV_INFO("SVL\n");
 
 	#if (GC_MODE != GC_MODE_GREEDY)
 	struct list_head *target_line_list;
@@ -1011,7 +1014,6 @@ static void mark_line_free(struct conv_ftl *conv_ftl, struct ppa *ppa)
 
 static int do_gc(struct conv_ftl *conv_ftl, bool force)
 {
-	NVMEV_INFO("GC enabled");
 	struct line *victim_line = NULL;
 	struct ssdparams *spp = &conv_ftl->ssd->sp;
 	struct ppa ppa;
@@ -1342,11 +1344,17 @@ static void conv_flush(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 	for (i = 0; i < ns->nr_parts; i++) {
 		latest = max(latest, ssd_next_idle_time(conv_ftls[i].ssd));
 		svl_tot_called += conv_ftls[i].svl_called_count;
+		struct line_mgmt lm = (conv_ftls[i]).lm;
+
+		NVMEV_INFO("TTL %u: %u\n", i, lm.tt_lines);
+		NVMEV_INFO("FULL %u: %u\n", i, lm.full_line_cnt);
+		NVMEV_INFO("FREE %u: %u, %u\n", i, lm.slc_free_line_cnt, lm.free_line_cnt);
+		NVMEV_INFO("VICT %u: %u, %u\n", i, lm.slc_victim_line_cnt, lm.victim_line_cnt);
 	}
 
-	NVMEV_INFO("DEBUG\n");
 	NVMEV_INFO("%s: latency=%llu\n", __func__, latest - start);
 	NVMEV_INFO("svl called count : %u\n", svl_tot_called);
+	
 
 	ret->status = NVME_SC_SUCCESS;
 	ret->nsecs_target = latest;
