@@ -782,6 +782,7 @@ static uint64_t gc_write_page(struct conv_ftl *conv_ftl, struct ppa *old_ppa)
 			gcw.cmd = NAND_WRITE;
 			/* SLCB: Use region-specific xfer_size */
 			gcw.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
+			
 			/*
 			if (gcw.is_slc) {
                 gcw.xfer_size = SLC_ONESHOT_PAGE_SIZE; 
@@ -1174,6 +1175,7 @@ static bool conv_read(struct nvmev_ns *ns, struct nvmev_request *req, struct nvm
                 }
 				*/
 
+
 				srd.ppa = &prev_ppa;
 				nsecs_completed = ssd_advance_nand(conv_ftl->ssd, &srd);
 				nsecs_latest = max(nsecs_completed, nsecs_latest);
@@ -1277,16 +1279,16 @@ static bool conv_write(struct nvmev_ns *ns, struct nvmev_request *req, struct nv
 		/* SLCB: set xfer_size */
 		struct line *cur_line = get_line(conv_ftl, &ppa);
 		swr.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg;
-		/*
+
 		if (cur_line->is_slc) {
-			swr.xfer_size = SLC_ONESHOT_PAGE_SIZE; // SLC
+			// swr.xfer_size = SLC_ONESHOT_PAGE_SIZE; // SLC
 			swr.is_slc = true;
 		} 
 		else {
-			swr.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg; // TLC
+			// swr.xfer_size = spp->pgsz * spp->pgs_per_oneshotpg; // TLC
 			swr.is_slc = false;
 		}
-		*/
+
 
 		/* update maptbl */
 		set_maptbl_ent(conv_ftl, local_lpn, &ppa);

@@ -86,7 +86,7 @@ static_assert((ONESHOT_PAGE_SIZE % FLASH_PAGE_SIZE) == 0);
 #define NAND_CHANNEL_BANDWIDTH (800ull) //MB/s
 #define PCIE_BANDWIDTH (3360ull) //MB/s
 
-/*
+
 #define NAND_4KB_READ_LATENCY_LSB (35760 - 6000) //ns
 #define NAND_4KB_READ_LATENCY_MSB (35760 + 6000) //ns
 #define NAND_4KB_READ_LATENCY_CSB (35760 + 6000) //ns
@@ -94,10 +94,9 @@ static_assert((ONESHOT_PAGE_SIZE % FLASH_PAGE_SIZE) == 0);
 #define NAND_READ_LATENCY_MSB (36013 + 6000)
 #define NAND_READ_LATENCY_CSB (36013 + 6000)
 #define NAND_PROG_LATENCY (185000)
-#define NAND_ERASE_LATENCY (0)
-*/
+#define NAND_ERASE_LATENCY (1850000)
 
-
+/*
 #define NAND_4KB_READ_LATENCY_LSB (1) //ns
 #define NAND_4KB_READ_LATENCY_MSB (1) //ns
 #define NAND_4KB_READ_LATENCY_CSB (1) //ns
@@ -106,7 +105,7 @@ static_assert((ONESHOT_PAGE_SIZE % FLASH_PAGE_SIZE) == 0);
 #define NAND_READ_LATENCY_CSB (1)
 #define NAND_PROG_LATENCY (1)
 #define NAND_ERASE_LATENCY (1)
-
+*/
 
 // SLC buffer settings
 #define SLC_PORTION (20)

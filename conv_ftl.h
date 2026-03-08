@@ -17,10 +17,10 @@
 
 #define GC_MODE (GC_MODE_CB)
 
-#define SLC_GC_THRESHOLD 5
-#define SLC_GC_THRESHOLD_HIGH 10
-#define GC_THRESHOLD 240
-#define GC_THRESHOLD_HIGH 240
+#define SLC_GC_THRESHOLD 3
+#define SLC_GC_THRESHOLD_HIGH 6
+#define GC_THRESHOLD 10
+#define GC_THRESHOLD_HIGH 20
 
 
 struct convparams {
